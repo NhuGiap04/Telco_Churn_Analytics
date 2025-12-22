@@ -56,7 +56,7 @@ This project provides a business analytics dashboard that helps identify key fac
 
 3. **Install dependencies**
    ```bash
-   pip install pandas numpy plotly dash dash-bootstrap-components
+   pip install -r requirements.txt
    ```
 
 4. **Run the dashboard**
