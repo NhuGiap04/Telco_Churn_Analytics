@@ -63,7 +63,8 @@ def create_churn_by_internet_chart(df):
     )
     internet_churn = internet_churn.sort_values('InternetService')
     
-    colors = ['#f39c12', '#e74c3c', '#00B894']
+    # Consistent colors: Fiber optic=red, DSL=orange, No=green
+    colors = ['#e74c3c', '#f39c12', '#00B894']
     
     fig = go.Figure(data=[
         go.Bar(
@@ -106,7 +107,8 @@ def create_churn_by_contract_chart(df):
     )
     contract_churn = contract_churn.sort_values('Contract')
     
-    colors = ['#e74c3c', '#f39c12', '#00B894']
+    # Distinct colors: Month-to-month=blue, One year=purple, Two year=teal
+    colors = ['#3498db', '#9b59b6', '#1abc9c']
     
     fig = go.Figure(data=[
         go.Bar(
@@ -147,11 +149,12 @@ def create_tenure_histogram(df):
     
     fig = go.Figure()
     
+    # Distinct colors: Churned=salmon/rose, Stayed=sky blue
     fig.add_trace(go.Bar(
         x=labels,
         y=churned.values,
         name='Churned',
-        marker_color='#e74c3c',
+        marker_color='#ee5a6f',
         width=0.35
     ))
     
@@ -159,7 +162,7 @@ def create_tenure_histogram(df):
         x=labels,
         y=stayed.values,
         name='Stayed',
-        marker_color='#00B894',
+        marker_color='#48dbfb',
         width=0.35
     ))
     
@@ -195,7 +198,7 @@ def create_ltv_by_internet_service_chart(df):
     # Calculate average TotalCharges (as LTV proxy) by tenure bin and internet service
     ltv_data = df_copy.groupby(['TenureBin', 'InternetService'], observed=True)['TotalCharges'].mean().reset_index()
     
-    # Colors for each internet service
+    # Consistent colors: Fiber optic=red, DSL=orange, No=green
     colors = {
         'Fiber optic': '#e74c3c',
         'DSL': '#f39c12',
@@ -246,11 +249,11 @@ def create_ltv_by_contract_chart(df):
     # Calculate average TotalCharges (as LTV proxy) by tenure bin and contract
     ltv_data = df_copy.groupby(['TenureBin', 'Contract'], observed=True)['TotalCharges'].mean().reset_index()
     
-    # Colors for each contract type
+    # Distinct colors: Month-to-month=blue, One year=purple, Two year=teal
     colors = {
-        'Month-to-month': '#e74c3c',
-        'One year': '#f39c12',
-        'Two year': '#00B894'
+        'Month-to-month': '#3498db',
+        'One year': '#9b59b6',
+        'Two year': '#1abc9c'
     }
     
     fig = go.Figure()
