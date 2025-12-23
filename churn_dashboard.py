@@ -218,8 +218,10 @@ def create_tenure_histogram(df):
         xaxis_title='Tenure (months)',
         yaxis_title='Number of Customers',
         yaxis=dict(
+            range=[0, 1500],
             showgrid=True,
-            gridcolor='rgba(200, 200, 200, 0.2)'
+            gridcolor='rgba(200, 200, 200, 0.2)',
+            dtick=500
         ),
         barmode='group',
         plot_bgcolor='rgba(0,0,0,0)',
@@ -233,7 +235,21 @@ def create_tenure_histogram(df):
             y=1.05,
             xanchor='center',
             x=0.5
-        )
+        ),
+        shapes=[
+            dict(
+                type='line',
+                x0=0,
+                x1=1,
+                xref='paper',
+                y0=1500,
+                y1=1500,
+                line=dict(
+                    color='rgba(200, 200, 200, 0.4)',
+                    width=1
+                )
+            )
+        ]
     )
     
     return fig
@@ -246,9 +262,24 @@ def create_ltv_by_internet_service_chart(df):
     
     df_copy = df.copy()
     df_copy['TenureBin'] = pd.cut(df_copy['tenure'], bins=bins, labels=labels, include_lowest=True)
+
+    print(df_copy.head())
     
-    # Calculate average TotalCharges (as LTV proxy) by tenure bin and internet service
-    ltv_data = df_copy.groupby(['TenureBin', 'InternetService'], observed=True)['TotalCharges'].mean().reset_index()
+    # Calculate LTV using formula: avg. spend per year per customer x avg. customer tenure in years
+    # LTV = (TotalCharges / tenure in years) * avg tenure in years for that bin
+    ltv_data = df_copy.groupby(['TenureBin', 'InternetService'], observed=True).agg({
+        'TotalCharges': 'mean',
+        'tenure': 'mean'
+    }).reset_index()
+
+    print(ltv_data.head())
+    
+    # Calculate avg spend per year and multiply by avg tenure in years
+    ltv_data['AvgSpendPerYear'] = ltv_data['TotalCharges'] / (ltv_data['tenure'] / 12)
+    ltv_data['TenureYears'] = ltv_data['tenure'] / 12
+    ltv_data['LTV'] = ltv_data['AvgSpendPerYear'] * ltv_data['TenureYears']
+
+    print(ltv_data.head())
     
     # Consistent colors: Fiber optic=red, DSL=orange, No=green
     colors = {
@@ -263,7 +294,7 @@ def create_ltv_by_internet_service_chart(df):
         service_data = ltv_data[ltv_data['InternetService'] == service]
         fig.add_trace(go.Scatter(
             x=service_data['TenureBin'].astype(str),
-            y=service_data['TotalCharges'],
+            y=service_data['LTV'],
             mode='lines+markers',
             name=service,
             line=dict(color=colors[service], width=2),
@@ -272,7 +303,7 @@ def create_ltv_by_internet_service_chart(df):
     
     fig.update_layout(
         xaxis_title='Tenure (months)',
-        yaxis_title='Average Lifetime Value ($)',
+        yaxis_title='Lifetime Value ($)',
         yaxis=dict(
             range=[0, 8000],
             showgrid=True,
@@ -280,7 +311,7 @@ def create_ltv_by_internet_service_chart(df):
         ),
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=40, r=40, t=20, b=40),
+        margin=dict(l=40, r=40, t=40, b=40),
         height=300,
         font=dict(family='"Segoe UI", sans-serif'),
         legend=dict(
@@ -317,14 +348,23 @@ def create_ltv_by_contract_chart(df):
     df_copy = df.copy()
     df_copy['TenureBin'] = pd.cut(df_copy['tenure'], bins=bins, labels=labels, include_lowest=True)
     
-    # Calculate average TotalCharges (as LTV proxy) by tenure bin and contract
-    ltv_data = df_copy.groupby(['TenureBin', 'Contract'], observed=True)['TotalCharges'].mean().reset_index()
+    # Calculate LTV using formula: avg. spend per year per customer x avg. customer tenure in years
+    # LTV = (TotalCharges / tenure in years) * avg tenure in years for that bin
+    ltv_data = df_copy.groupby(['TenureBin', 'Contract'], observed=True).agg({
+        'TotalCharges': 'mean',
+        'tenure': 'mean'
+    }).reset_index()
     
-    # Distinct colors: Month-to-month=blue, One year=purple, Two year=teal
+    # Calculate avg spend per year and multiply by avg tenure in years
+    ltv_data['AvgSpendPerYear'] = ltv_data['TotalCharges'] / (ltv_data['tenure'] / 12)
+    ltv_data['TenureYears'] = ltv_data['tenure'] / 12
+    ltv_data['LTV'] = ltv_data['AvgSpendPerYear'] * ltv_data['TenureYears']
+    
+    # Distinct colors: Month-to-month=yellow, One year=green, Two year=purple
     colors = {
-        'Month-to-month': '#3498db',
-        'One year': '#9b59b6',
-        'Two year': '#1abc9c'
+        'Month-to-month': '#FFD700',
+        'One year': '#2ecc71',
+        'Two year': '#9b59b6'
     }
     
     fig = go.Figure()
@@ -333,7 +373,7 @@ def create_ltv_by_contract_chart(df):
         contract_data = ltv_data[ltv_data['Contract'] == contract]
         fig.add_trace(go.Scatter(
             x=contract_data['TenureBin'].astype(str),
-            y=contract_data['TotalCharges'],
+            y=contract_data['LTV'],
             mode='lines+markers',
             name=contract,
             line=dict(color=colors[contract], width=2),
@@ -342,7 +382,7 @@ def create_ltv_by_contract_chart(df):
     
     fig.update_layout(
         xaxis_title='Tenure (months)',
-        yaxis_title='Average Lifetime Value ($)',
+        yaxis_title='Lifetime Value ($)',
         yaxis=dict(
             range=[0, 8000],
             showgrid=True,
@@ -350,7 +390,7 @@ def create_ltv_by_contract_chart(df):
         ),
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=40, r=40, t=20, b=40),
+        margin=dict(l=40, r=40, t=40, b=40),
         height=300,
         font=dict(family='"Segoe UI", sans-serif'),
         legend=dict(
@@ -790,31 +830,6 @@ app.layout = dbc.Container([
                     dbc.Card([
                         dbc.CardBody([
                             html.H5(
-                                "Tenure Distribution (Churned vs Stayed)",
-                                style={
-                                    'textAlign': 'center',
-                                    'color': '#2c3e50',
-                                    'fontWeight': '600',
-                                    'marginBottom': '15px',
-                                    'fontFamily': '"Segoe UI", sans-serif'
-                                }
-                            ),
-                            dcc.Graph(
-                                id='tenure-histogram',
-                                config={'displayModeBar': False}
-                            )
-                        ])
-                    ], style={
-                        'borderRadius': '10px',
-                        'border': 'none',
-                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
-                    })
-                ], md=4),
-                
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5(
                                 "Lifetime Value by Internet Service",
                                 style={
                                     'textAlign': 'center',
@@ -851,6 +866,31 @@ app.layout = dbc.Container([
                             ),
                             dcc.Graph(
                                 id='ltv-by-contract-chart',
+                                config={'displayModeBar': False}
+                            )
+                        ])
+                    ], style={
+                        'borderRadius': '10px',
+                        'border': 'none',
+                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
+                    })
+                ], md=4),
+                
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5(
+                                "Tenure Distribution (Churned vs Stayed)",
+                                style={
+                                    'textAlign': 'center',
+                                    'color': '#2c3e50',
+                                    'fontWeight': '600',
+                                    'marginBottom': '15px',
+                                    'fontFamily': '"Segoe UI", sans-serif'
+                                }
+                            ),
+                            dcc.Graph(
+                                id='tenure-histogram',
                                 config={'displayModeBar': False}
                             )
                         ])

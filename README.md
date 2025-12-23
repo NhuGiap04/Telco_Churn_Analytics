@@ -74,8 +74,10 @@ This project provides a business analytics dashboard that helps identify key fac
 Telco_Churn_Analytics/
 ├── churn_dashboard.py                      # Main Dash application
 ├── data/
-│   └── Telco-Customer-Churn.csv  # Dataset
-├── Telco_Churn_Analytics.ipynb             # Jupyter notebook for EDA
+│   └── Telco-Customer-Churn.csv            # Dataset
+├── notebooks/
+│   └── Telco_Churn_Analytics.ipynb         # Jupyter notebook for EDA
+├── requirements.txt
 └── README.md                               # Project documentation
 ```
 
