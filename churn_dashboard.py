@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from dash import Dash, html, dcc, callback, Output, Input
 import dash_bootstrap_components as dbc
 
@@ -130,59 +131,7 @@ def create_churn_by_contract_chart(df):
     
     return fig
 
-def create_churn_by_payment_method_chart(df):
-    """Create vertical bar chart of churn rate by payment method."""
-    payment_churn = df.groupby('PaymentMethod').agg({
-        'ChurnBinary': ['sum', 'count']
-    }).reset_index()
-    payment_churn.columns = ['PaymentMethod', 'Churners', 'Total']
-    payment_churn['ChurnRate'] = payment_churn['Churners'] / payment_churn['Total'] * 100
-    
-    # Map payment method names to shorter versions
-    name_mapping = {
-        'Electronic check': 'Electronic',
-        'Mailed check': 'Mailed',
-        'Bank transfer (automatic)': 'Bank Transfer',
-        'Credit card (automatic)': 'Credit Card'
-    }
-    payment_churn['PaymentMethodShort'] = payment_churn['PaymentMethod'].map(name_mapping)
-    
-    # Sort by churn rate descending
-    payment_churn = payment_churn.sort_values('ChurnRate', ascending=False)
-    
-    # Use sky blue color for all bars
-    colors = ['#87CEEB'] * len(payment_churn)
-    
-    fig = go.Figure(data=[
-        go.Bar(
-            x=payment_churn['PaymentMethodShort'],
-            y=payment_churn['ChurnRate'],
-            text=[f'{v:.2f}%' for v in payment_churn['ChurnRate']],
-            textposition='outside',
-            marker_color=colors,
-            width=0.5
-        )
-    ])
-    
-    fig.update_layout(
-        xaxis_title='Payment Method',
-        yaxis_title='Churn Rate (%)',
-        yaxis=dict(
-            range=[0, max(payment_churn['ChurnRate']) * 1.2],
-            showgrid=True,
-            gridcolor='rgba(200, 200, 200, 0.2)'
-        ),
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=40, r=40, t=20, b=40),
-        height=300,
-        font=dict(family='"Segoe UI", sans-serif'),
-        xaxis=dict(tickangle=0)
-    )
-    
-    return fig
-
-def create_tenure_histogram(df):
+def create_tenure_distribution_chart(df):
     """Create histogram of tenure for churned vs stayed customers."""
     # Create tenure bins
     bins = [0, 15, 30, 45, 60, 100]
@@ -254,166 +203,145 @@ def create_tenure_histogram(df):
     
     return fig
 
-def create_ltv_by_internet_service_chart(df):
-    """Create line chart of LTV by tenure for each internet service type."""
-    # Create 1-year (12-month) tenure bins
-    bins = [0, 12, 24, 36, 48, 60, 72]
-    labels = ['12', '24', '36', '48', '60', '72']
-    
+def create_ltv_comparison_chart(df):
+    """Create line chart comparing LTV by month-to-month contract and fiber optic over tenure (6 yearly bins)."""
     df_copy = df.copy()
+    df_copy['LTV'] = df_copy['tenure'] * df_copy['MonthlyCharges']
+    
+    # Create 6 tenure bins (1 year each)
+    bins = [0, 12, 24, 36, 48, 60, 72]
+    labels = ['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5', 'Year 6']
     df_copy['TenureBin'] = pd.cut(df_copy['tenure'], bins=bins, labels=labels, include_lowest=True)
-
-    print(df_copy.head())
-    
-    # Calculate LTV using formula: avg. spend per year per customer x avg. customer tenure in years
-    # LTV = (TotalCharges / tenure in years) * avg tenure in years for that bin
-    ltv_data = df_copy.groupby(['TenureBin', 'InternetService'], observed=True).agg({
-        'TotalCharges': 'mean',
-        'tenure': 'mean'
-    }).reset_index()
-
-    print(ltv_data.head())
-    
-    # Calculate avg spend per year and multiply by avg tenure in years
-    ltv_data['AvgSpendPerYear'] = ltv_data['TotalCharges'] / (ltv_data['tenure'] / 12)
-    ltv_data['TenureYears'] = ltv_data['tenure'] / 12
-    ltv_data['LTV'] = ltv_data['AvgSpendPerYear'] * ltv_data['TenureYears']
-
-    print(ltv_data.head())
-    
-    # Consistent colors: Fiber optic=red, DSL=orange, No=green
-    colors = {
-        'Fiber optic': '#e74c3c',
-        'DSL': '#f39c12',
-        'No': '#00B894'
-    }
     
     fig = go.Figure()
     
-    for service in ['Fiber optic', 'DSL', 'No']:
-        service_data = ltv_data[ltv_data['InternetService'] == service]
+    # Month-to-month contract LTV
+    mtm_df = df_copy[df_copy['Contract'] == 'Month-to-month'].copy()
+    if len(mtm_df) > 0:
+        mtm_grouped = mtm_df.groupby('TenureBin', observed=True)['LTV'].mean().reindex(labels, fill_value=0)
         fig.add_trace(go.Scatter(
-            x=service_data['TenureBin'].astype(str),
-            y=service_data['LTV'],
+            x=labels,
+            y=mtm_grouped.values,
+            name='Month-to-Month',
             mode='lines+markers',
-            name=service,
-            line=dict(color=colors[service], width=2),
-            marker=dict(size=6)
+            line=dict(color='#e74c3c', width=3),
+            marker=dict(size=8)
+        ))
+    
+    # Fiber optic internet service LTV
+    fiber_df = df_copy[df_copy['InternetService'] == 'Fiber optic'].copy()
+    if len(fiber_df) > 0:
+        fiber_grouped = fiber_df.groupby('TenureBin', observed=True)['LTV'].mean().reindex(labels, fill_value=0)
+        fig.add_trace(go.Scatter(
+            x=labels,
+            y=fiber_grouped.values,
+            name='Fiber Optic',
+            mode='lines+markers',
+            line=dict(color='#2ecc71', width=3),
+            marker=dict(size=8)
         ))
     
     fig.update_layout(
-        xaxis_title='Tenure (months)',
-        yaxis_title='Lifetime Value ($)',
+        xaxis_title='Tenure Period',
+        yaxis_title='Average LTV ($)',
         yaxis=dict(
-            range=[0, 8000],
+            showgrid=True,
+            gridcolor='rgba(200, 200, 200, 0.2)'
+        ),
+        xaxis=dict(
             showgrid=True,
             gridcolor='rgba(200, 200, 200, 0.2)'
         ),
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=40, r=40, t=40, b=40),
-        height=300,
+        margin=dict(l=60, r=40, t=20, b=40),
+        height=400,
         font=dict(family='"Segoe UI", sans-serif'),
         legend=dict(
             orientation='h',
             yanchor='bottom',
-            y=1.05,
+            y=1.02,
             xanchor='center',
             x=0.5
-        ),
-        shapes=[
-            dict(
-                type='line',
-                x0=0,
-                x1=1,
-                xref='paper',
-                y0=8000,
-                y1=8000,
-                line=dict(
-                    color='rgba(200, 200, 200, 0.4)',
-                    width=1
-                )
-            )
-        ]
+        )
     )
     
     return fig
 
-def create_ltv_by_contract_chart(df):
-    """Create line chart of LTV by tenure for each contract type."""
-    # Create 1-year (12-month) tenure bins
-    bins = [0, 12, 24, 36, 48, 60, 72]
-    labels = ['12', '24', '36', '48', '60', '72']
-    
+def create_ltv_by_service_bundle_chart(df):
+    """Create diverging horizontal bar chart showing actual LTV (right) and lost potential LTV (left) by service bundle."""
+    # Calculate actual LTV as tenure × monthly charges
     df_copy = df.copy()
-    df_copy['TenureBin'] = pd.cut(df_copy['tenure'], bins=bins, labels=labels, include_lowest=True)
+    df_copy['ActualLTV'] = df_copy['tenure'] * df_copy['MonthlyCharges']
     
-    # Calculate LTV using formula: avg. spend per year per customer x avg. customer tenure in years
-    # LTV = (TotalCharges / tenure in years) * avg tenure in years for that bin
-    ltv_data = df_copy.groupby(['TenureBin', 'Contract'], observed=True).agg({
-        'TotalCharges': 'mean',
-        'tenure': 'mean'
+    # Create service bundle combination
+    df_copy['ServiceBundle'] = df_copy['InternetService'] + ' | ' + df_copy['Contract']
+    
+    # Calculate average actual LTV and average monthly charges for each service bundle
+    ltv_by_bundle = df_copy.groupby('ServiceBundle').agg({
+        'ActualLTV': 'mean',
+        'MonthlyCharges': 'mean'
     }).reset_index()
     
-    # Calculate avg spend per year and multiply by avg tenure in years
-    ltv_data['AvgSpendPerYear'] = ltv_data['TotalCharges'] / (ltv_data['tenure'] / 12)
-    ltv_data['TenureYears'] = ltv_data['tenure'] / 12
-    ltv_data['LTV'] = ltv_data['AvgSpendPerYear'] * ltv_data['TenureYears']
+    # Calculate expected LTV if customers stayed for 72 months
+    ltv_by_bundle['ExpectedLTV72'] = ltv_by_bundle['MonthlyCharges'] * 72
     
-    # Distinct colors: Month-to-month=yellow, One year=green, Two year=purple
-    colors = {
-        'Month-to-month': '#FFD700',
-        'One year': '#2ecc71',
-        'Two year': '#9b59b6'
-    }
+    # Calculate lost LTV (potential - actual) as negative for left side
+    ltv_by_bundle['LostLTV'] = -(ltv_by_bundle['ExpectedLTV72'] - ltv_by_bundle['ActualLTV'])
+    
+    # Sort by actual LTV (ascending for horizontal bars)
+    ltv_by_bundle = ltv_by_bundle.sort_values('ActualLTV', ascending=True)
     
     fig = go.Figure()
     
-    for contract in ['Month-to-month', 'One year', 'Two year']:
-        contract_data = ltv_data[ltv_data['Contract'] == contract]
-        fig.add_trace(go.Scatter(
-            x=contract_data['TenureBin'].astype(str),
-            y=contract_data['LTV'],
-            mode='lines+markers',
-            name=contract,
-            line=dict(color=colors[contract], width=2),
-            marker=dict(size=6)
-        ))
+    # Add lost potential LTV (red bars, on left/negative side)
+    fig.add_trace(go.Bar(
+        x=ltv_by_bundle['LostLTV'],
+        y=ltv_by_bundle['ServiceBundle'],
+        orientation='h',
+        name='Lost Potential LTV',
+        marker_color='#e74c3c'
+    ))
+    
+    # Add actual LTV (blue bars, on right/positive side)
+    fig.add_trace(go.Bar(
+        x=ltv_by_bundle['ActualLTV'],
+        y=ltv_by_bundle['ServiceBundle'],
+        orientation='h',
+        name='Actual LTV',
+        marker_color='#0072B2'
+    ))
+    
+    # Calculate max value for symmetric axis
+    max_val = max(abs(ltv_by_bundle['LostLTV'].min()), ltv_by_bundle['ActualLTV'].max())
     
     fig.update_layout(
-        xaxis_title='Tenure (months)',
-        yaxis_title='Lifetime Value ($)',
-        yaxis=dict(
-            range=[0, 8000],
+        xaxis_title='Lifetime Value ($)',
+        yaxis_title='Internet Service & Contract',
+        xaxis=dict(
+            range=[-max_val * 1.1, max_val * 1.1],
             showgrid=True,
-            gridcolor='rgba(200, 200, 200, 0.2)'
+            gridcolor='rgba(200, 200, 200, 0.2)',
+            zeroline=True,
+            zerolinecolor='rgba(0, 0, 0, 0.5)',
+            zerolinewidth=2
         ),
+        yaxis=dict(
+            ticksuffix='  '
+        ),
+        barmode='relative',
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=40, r=40, t=40, b=40),
-        height=300,
+        margin=dict(l=250, r=80, t=20, b=40),
+        height=400,
         font=dict(family='"Segoe UI", sans-serif'),
         legend=dict(
             orientation='h',
             yanchor='bottom',
-            y=1.05,
+            y=1.02,
             xanchor='center',
             x=0.5
-        ),
-        shapes=[
-            dict(
-                type='line',
-                x0=0,
-                x1=1,
-                xref='paper',
-                y0=8000,
-                y1=8000,
-                line=dict(
-                    color='rgba(200, 200, 200, 0.4)',
-                    width=1
-                )
-            )
-        ]
+        )
     )
     
     return fig
@@ -426,148 +354,6 @@ external_stylesheets = [dbc.themes.BOOTSTRAP]
 
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 app.title = "Telco Churn Analysis"
-
-# ============================================================================
-# SIDEBAR FILTER SECTION
-# ============================================================================
-
-sidebar_style = {
-    'backgroundColor': '#2c3e50',
-    'padding': '20px',
-    'borderRadius': '10px',
-    'height': '100%',
-    'minHeight': 'calc(100vh - 60px)'
-}
-
-filter_label_style = {
-    'color': '#ffffff',
-    'fontWeight': '600',
-    'fontSize': '0.85rem',
-    'marginBottom': '8px',
-    'fontFamily': '"Segoe UI", sans-serif',
-    'textTransform': 'uppercase',
-    'letterSpacing': '0.5px'
-}
-
-sidebar = html.Div([
-    # Gender Filter
-    html.Div([
-        html.Label("Gender", style=filter_label_style),
-        dcc.Dropdown(
-            id='gender-filter',
-            options=[
-                {'label': 'All', 'value': 'All'},
-                {'label': 'Male', 'value': 'Male'},
-                {'label': 'Female', 'value': 'Female'}
-            ],
-            value='All',
-            clearable=False,
-            style={'fontFamily': '"Segoe UI", sans-serif'}
-        )
-    ], style={'marginBottom': '20px'}),
-    
-    # Paperless Billing Filter
-    html.Div([
-        html.Label("Paperless Billing", style=filter_label_style),
-        dcc.Dropdown(
-            id='paperless-filter',
-            options=[
-                {'label': 'All', 'value': 'All'},
-                {'label': 'Yes', 'value': 'Yes'},
-                {'label': 'No', 'value': 'No'}
-            ],
-            value='All',
-            clearable=False,
-            style={'fontFamily': '"Segoe UI", sans-serif'}
-        )
-    ], style={'marginBottom': '20px'}),
-    
-    # Phone Service Filter
-    html.Div([
-        html.Label("Phone Service", style=filter_label_style),
-        dcc.Dropdown(
-            id='phone-filter',
-            options=[
-                {'label': 'All', 'value': 'All'},
-                {'label': 'Yes', 'value': 'Yes'},
-                {'label': 'No', 'value': 'No'}
-            ],
-            value='All',
-            clearable=False,
-            style={'fontFamily': '"Segoe UI", sans-serif'}
-        )
-    ], style={'marginBottom': '20px'}),
-    
-    # Dependents Filter
-    html.Div([
-        html.Label("Dependents", style=filter_label_style),
-        dcc.Dropdown(
-            id='dependents-filter',
-            options=[
-                {'label': 'All', 'value': 'All'},
-                {'label': 'Yes', 'value': 'Yes'},
-                {'label': 'No', 'value': 'No'}
-            ],
-            value='All',
-            clearable=False,
-            style={'fontFamily': '"Segoe UI", sans-serif'}
-        )
-    ], style={'marginBottom': '20px'}),
-    
-    # Tenure Filter
-    html.Div([
-        html.Label("Tenure (months)", style=filter_label_style),
-        html.Div([
-            dcc.Input(
-                id='tenure-min',
-                type='number',
-                placeholder='Min',
-                min=0,
-                max=72,
-                value=0,
-                style={
-                    'width': '48%',
-                    'marginRight': '4%',
-                    'fontFamily': '"Segoe UI", sans-serif',
-                    'padding': '8px',
-                    'borderRadius': '4px',
-                    'border': '1px solid #ccc'
-                }
-            ),
-            dcc.Input(
-                id='tenure-max',
-                type='number',
-                placeholder='Max',
-                min=0,
-                max=72,
-                value=72,
-                style={
-                    'width': '48%',
-                    'fontFamily': '"Segoe UI", sans-serif',
-                    'padding': '8px',
-                    'borderRadius': '4px',
-                    'border': '1px solid #ccc'
-                }
-            )
-        ], style={'display': 'flex', 'justifyContent': 'space-between'})
-    ], style={'marginBottom': '25px'}),
-    
-    # Reset Button
-    html.Div([
-        dbc.Button(
-            "Reset Filters",
-            id='reset-filters',
-            color='success',
-            outline=True,
-            style={
-                'width': '100%',
-                'fontFamily': '"Segoe UI", sans-serif',
-                'fontWeight': '600'
-            }
-        )
-    ], style={'marginTop': '20px'})
-    
-], style=sidebar_style)
 
 # ============================================================================
 # LAYOUT
@@ -601,21 +387,12 @@ app.layout = dbc.Container([
         ])
     ], className='mb-4'),
     
+    # =================================================================
+    # KPI CARDS AND FILTERS ROW
+    # =================================================================
     dbc.Row([
-        # =====================================================================
-        # LEFT SIDEBAR - FILTERS
-        # =====================================================================
+        # KPIs on the left
         dbc.Col([
-            sidebar
-        ], md=2, style={'paddingRight': '10px'}),
-        
-        # =====================================================================
-        # MAIN CONTENT AREA
-        # =====================================================================
-        dbc.Col([
-            # =================================================================
-            # KPI CARDS ROW
-            # =================================================================
             dbc.Row([
                 # KPI Card 1: Total Customers
                 dbc.Col([
@@ -640,13 +417,14 @@ app.layout = dbc.Container([
                                     'fontFamily': '"Segoe UI", sans-serif'
                                 }
                             )
-                        ], style={'textAlign': 'center', 'padding': '20px'})
+                        ], style={'textAlign': 'center', 'padding': '20px 10px'})
                     ], style={
                         'borderRadius': '10px',
                         'border': 'none',
-                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
+                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)',
+                        'height': '100%'
                     })
-                ], md=3),
+                ], md=6),
                 
                 # KPI Card 2: Churn Rate
                 dbc.Col([
@@ -671,14 +449,17 @@ app.layout = dbc.Container([
                                     'fontFamily': '"Segoe UI", sans-serif'
                                 }
                             )
-                        ], style={'textAlign': 'center', 'padding': '20px'})
+                        ], style={'textAlign': 'center', 'padding': '20px 10px'})
                     ], style={
                         'borderRadius': '10px',
                         'border': 'none',
-                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
+                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)',
+                        'height': '100%'
                     })
-                ], md=3),
-                
+                ], md=6),
+            ], className='mb-2'),
+            
+            dbc.Row([
                 # KPI Card 3: Monthly Revenue
                 dbc.Col([
                     dbc.Card([
@@ -702,13 +483,14 @@ app.layout = dbc.Container([
                                     'fontFamily': '"Segoe UI", sans-serif'
                                 }
                             )
-                        ], style={'textAlign': 'center', 'padding': '20px'})
+                        ], style={'textAlign': 'center', 'padding': '20px 10px'})
                     ], style={
                         'borderRadius': '10px',
                         'border': 'none',
-                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
+                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)',
+                        'height': '100%'
                     })
-                ], md=3),
+                ], md=6),
                 
                 # KPI Card 4: Average Tenure
                 dbc.Col([
@@ -733,177 +515,277 @@ app.layout = dbc.Container([
                                     'fontFamily': '"Segoe UI", sans-serif'
                                 }
                             )
-                        ], style={'textAlign': 'center', 'padding': '20px'})
+                        ], style={'textAlign': 'center', 'padding': '20px 10px'})
                     ], style={
                         'borderRadius': '10px',
                         'border': 'none',
-                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
+                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)',
+                        'height': '100%'
                     })
-                ], md=3),
-            ], className='mb-4'),
-            
-            # =================================================================
-            # CHARTS ROW 1: Churn Rate Charts
-            # =================================================================
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5(
-                                "Churn Rate by Internet Service",
+                ], md=6),
+            ])
+        ], md=5),
+        
+        # Filters on the right (horizontal layout)
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row([
+                        # Gender Filter
+                        dbc.Col([
+                            html.Label("Gender", style={
+                                'color': '#2c3e50',
+                                'fontWeight': '600',
+                                'fontSize': '0.7rem',
+                                'marginBottom': '3px',
+                                'fontFamily': '"Segoe UI", sans-serif'
+                            }),
+                            dcc.Dropdown(
+                                id='gender-filter',
+                                options=[
+                                    {'label': 'All', 'value': 'All'},
+                                    {'label': 'Male', 'value': 'Male'},
+                                    {'label': 'Female', 'value': 'Female'}
+                                ],
+                                value='All',
+                                clearable=False,
+                                style={'fontFamily': '"Segoe UI", sans-serif', 'fontSize': '0.8rem'}
+                            )
+                        ], md=3),
+                        
+                        # Paperless Billing Filter
+                        dbc.Col([
+                            html.Label("Paperless Billing", style={
+                                'color': '#2c3e50',
+                                'fontWeight': '600',
+                                'fontSize': '0.7rem',
+                                'marginBottom': '3px',
+                                'fontFamily': '"Segoe UI", sans-serif'
+                            }),
+                            dcc.Dropdown(
+                                id='paperless-filter',
+                                options=[
+                                    {'label': 'All', 'value': 'All'},
+                                    {'label': 'Yes', 'value': 'Yes'},
+                                    {'label': 'No', 'value': 'No'}
+                                ],
+                                value='All',
+                                clearable=False,
+                                style={'fontFamily': '"Segoe UI", sans-serif', 'fontSize': '0.8rem'}
+                            )
+                        ], md=3),
+                        
+                        # Phone Service Filter
+                        dbc.Col([
+                            html.Label("Phone Service", style={
+                                'color': '#2c3e50',
+                                'fontWeight': '600',
+                                'fontSize': '0.7rem',
+                                'marginBottom': '3px',
+                                'fontFamily': '"Segoe UI", sans-serif'
+                            }),
+                            dcc.Dropdown(
+                                id='phone-filter',
+                                options=[
+                                    {'label': 'All', 'value': 'All'},
+                                    {'label': 'Yes', 'value': 'Yes'},
+                                    {'label': 'No', 'value': 'No'}
+                                ],
+                                value='All',
+                                clearable=False,
+                                style={'fontFamily': '"Segoe UI", sans-serif', 'fontSize': '0.8rem'}
+                            )
+                        ], md=3),
+                        
+                        # Dependents Filter
+                        dbc.Col([
+                            html.Label("Dependents", style={
+                                'color': '#2c3e50',
+                                'fontWeight': '600',
+                                'fontSize': '0.7rem',
+                                'marginBottom': '3px',
+                                'fontFamily': '"Segoe UI", sans-serif'
+                            }),
+                            dcc.Dropdown(
+                                id='dependents-filter',
+                                options=[
+                                    {'label': 'All', 'value': 'All'},
+                                    {'label': 'Yes', 'value': 'Yes'},
+                                    {'label': 'No', 'value': 'No'}
+                                ],
+                                value='All',
+                                clearable=False,
+                                style={'fontFamily': '"Segoe UI", sans-serif', 'fontSize': '0.8rem'}
+                            )
+                        ], md=3),
+                    ], className='mb-2'),
+                    
+                    # Reset Button
+                    dbc.Row([
+                        dbc.Col([
+                            html.Button(
+                                'Reset Filters',
+                                id='reset-filters',
+                                n_clicks=0,
                                 style={
-                                    'textAlign': 'center',
-                                    'color': '#2c3e50',
+                                    'width': '100%',
+                                    'backgroundColor': '#00B894',
+                                    'color': 'white',
+                                    'border': 'none',
+                                    'borderRadius': '5px',
+                                    'padding': '6px 15px',
+                                    'cursor': 'pointer',
                                     'fontWeight': '600',
-                                    'marginBottom': '15px',
+                                    'fontSize': '0.8rem',
                                     'fontFamily': '"Segoe UI", sans-serif'
                                 }
-                            ),
-                            dcc.Graph(
-                                id='churn-by-internet-chart',
-                                config={'displayModeBar': False}
                             )
-                        ])
-                    ], style={
-                        'borderRadius': '10px',
-                        'border': 'none',
-                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
-                    })
-                ], md=4),
-                
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5(
-                                "Churn Rate by Contract",
-                                style={
-                                    'textAlign': 'center',
-                                    'color': '#2c3e50',
-                                    'fontWeight': '600',
-                                    'marginBottom': '15px',
-                                    'fontFamily': '"Segoe UI", sans-serif'
-                                }
-                            ),
-                            dcc.Graph(
-                                id='churn-by-contract-chart',
-                                config={'displayModeBar': False}
-                            )
-                        ])
-                    ], style={
-                        'borderRadius': '10px',
-                        'border': 'none',
-                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
-                    })
-                ], md=4),
-                
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5(
-                                "Churn Rate by Payment Method",
-                                style={
-                                    'textAlign': 'center',
-                                    'color': '#2c3e50',
-                                    'fontWeight': '600',
-                                    'marginBottom': '15px',
-                                    'fontFamily': '"Segoe UI", sans-serif'
-                                }
-                            ),
-                            dcc.Graph(
-                                id='churn-by-payment-chart',
-                                config={'displayModeBar': False}
-                            )
-                        ])
-                    ], style={
-                        'borderRadius': '10px',
-                        'border': 'none',
-                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
-                    })
-                ], md=4),
-            ], className='mb-4'),
-            
-            # =================================================================
-            # CHARTS ROW 2: Tenure Distribution & LTV Charts
-            # =================================================================
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5(
-                                "Lifetime Value by Internet Service",
-                                style={
-                                    'textAlign': 'center',
-                                    'color': '#2c3e50',
-                                    'fontWeight': '600',
-                                    'marginBottom': '15px',
-                                    'fontFamily': '"Segoe UI", sans-serif'
-                                }
-                            ),
-                            dcc.Graph(
-                                id='ltv-by-internet-chart',
-                                config={'displayModeBar': False}
-                            )
-                        ])
-                    ], style={
-                        'borderRadius': '10px',
-                        'border': 'none',
-                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
-                    })
-                ], md=4),
-                
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5(
-                                "Lifetime Value by Contract",
-                                style={
-                                    'textAlign': 'center',
-                                    'color': '#2c3e50',
-                                    'fontWeight': '600',
-                                    'marginBottom': '15px',
-                                    'fontFamily': '"Segoe UI", sans-serif'
-                                }
-                            ),
-                            dcc.Graph(
-                                id='ltv-by-contract-chart',
-                                config={'displayModeBar': False}
-                            )
-                        ])
-                    ], style={
-                        'borderRadius': '10px',
-                        'border': 'none',
-                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
-                    })
-                ], md=4),
-                
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5(
-                                "Tenure Distribution (Churned vs Stayed)",
-                                style={
-                                    'textAlign': 'center',
-                                    'color': '#2c3e50',
-                                    'fontWeight': '600',
-                                    'marginBottom': '15px',
-                                    'fontFamily': '"Segoe UI", sans-serif'
-                                }
-                            ),
-                            dcc.Graph(
-                                id='tenure-histogram',
-                                config={'displayModeBar': False}
-                            )
-                        ])
-                    ], style={
-                        'borderRadius': '10px',
-                        'border': 'none',
-                        'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
-                    })
-                ], md=4),
-            ], className='mb-4'),
-            
-        ], md=10, style={'paddingLeft': '10px'})
-    ])
+                        ], md=12)
+                    ])
+                ], style={'padding': '15px'})
+            ], style={
+                'borderRadius': '10px',
+                'border': 'none',
+                'boxShadow': '0 2px 10px rgba(0,0,0,0.08)',
+                'height': '100%'
+            })
+        ], md=7)
+    ], className='mb-4'),
+    
+    # =================================================================
+    # CHARTS ROW 1: Churn Rate Charts
+    # =================================================================
+    dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H5(
+                        "Churn Rate by Internet Service",
+                        style={
+                            'textAlign': 'center',
+                            'color': '#2c3e50',
+                            'fontWeight': '600',
+                            'marginBottom': '15px',
+                            'fontFamily': '"Segoe UI", sans-serif'
+                        }
+                    ),
+                    dcc.Graph(
+                        id='churn-by-internet-chart',
+                        config={'displayModeBar': False}
+                    )
+                ])
+            ], style={
+                'borderRadius': '10px',
+                'border': 'none',
+                'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
+            })
+        ], md=4),
+        
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H5(
+                        "Churn Rate by Contract",
+                        style={
+                            'textAlign': 'center',
+                            'color': '#2c3e50',
+                            'fontWeight': '600',
+                            'marginBottom': '15px',
+                            'fontFamily': '"Segoe UI", sans-serif'
+                        }
+                    ),
+                    dcc.Graph(
+                        id='churn-by-contract-chart',
+                        config={'displayModeBar': False}
+                    )
+                ])
+            ], style={
+                'borderRadius': '10px',
+                'border': 'none',
+                'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
+            })
+        ], md=4),
+        
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H5(
+                        "Tenure Distribution (Churned vs Stayed)",
+                        style={
+                            'textAlign': 'center',
+                            'color': '#2c3e50',
+                            'fontWeight': '600',
+                            'marginBottom': '15px',
+                            'fontFamily': '"Segoe UI", sans-serif'
+                        }
+                    ),
+                    dcc.Graph(
+                        id='tenure-distribution-chart',
+                        config={'displayModeBar': False}
+                    )
+                ])
+            ], style={
+                'borderRadius': '10px',
+                'border': 'none',
+                'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
+            })
+        ], md=4),
+    ], className='mb-4'),
+    
+    # =================================================================
+    # CHARTS ROW 2: Tenure Distribution & LTV Charts
+    # =================================================================
+    dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H5(
+                        "Average Lifetime Value by Internet Service & Contract",
+                        style={
+                            'textAlign': 'center',
+                            'color': '#2c3e50',
+                            'fontWeight': '600',
+                            'marginBottom': '15px',
+                            'fontFamily': '"Segoe UI", sans-serif'
+                        }
+                    ),
+                    dcc.Graph(
+                        id='ltv-by-bundle-chart',
+                        config={'displayModeBar': False}
+                    )
+                ])
+            ], style={
+                'borderRadius': '10px',
+                'border': 'none',
+                'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
+            })
+        ], md=8),
+        
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H5(
+                        "LTV Comparison: Month-to-Month vs Fiber Optic",
+                        style={
+                            'textAlign': 'center',
+                            'color': '#2c3e50',
+                            'fontWeight': '600',
+                            'marginBottom': '15px',
+                            'fontFamily': '"Segoe UI", sans-serif'
+                        }
+                    ),
+                    dcc.Graph(
+                        id='ltv-customer-count-chart',
+                        config={'displayModeBar': False}
+                    )
+                ])
+            ], style={
+                'borderRadius': '10px',
+                'border': 'none',
+                'boxShadow': '0 2px 10px rgba(0,0,0,0.08)'
+            })
+        ], md=4),
+    ], className='mb-4'),
     
 ], fluid=True, style={
     'backgroundColor': '#f0f2f5',
@@ -918,7 +800,7 @@ app.layout = dbc.Container([
 # CALLBACKS
 # ============================================================================
 
-def filter_data(gender_filter, paperless_filter, phone_filter, dependents_filter, tenure_min, tenure_max):
+def filter_data(gender_filter, paperless_filter, phone_filter, dependents_filter):
     """Filter dataframe based on sidebar selections."""
     filtered_df = df.copy()
     
@@ -934,11 +816,6 @@ def filter_data(gender_filter, paperless_filter, phone_filter, dependents_filter
     if dependents_filter != 'All':
         filtered_df = filtered_df[filtered_df['Dependents'] == dependents_filter]
     
-    # Apply tenure filter
-    if tenure_min is not None and tenure_max is not None:
-        filtered_df = filtered_df[(filtered_df['tenure'] >= tenure_min) & 
-                                   (filtered_df['tenure'] <= tenure_max)]
-    
     return filtered_df
 
 @app.callback(
@@ -948,20 +825,17 @@ def filter_data(gender_filter, paperless_filter, phone_filter, dependents_filter
      Output('kpi-avg-tenure', 'children'),
      Output('churn-by-internet-chart', 'figure'),
      Output('churn-by-contract-chart', 'figure'),
-     Output('churn-by-payment-chart', 'figure'),
-     Output('tenure-histogram', 'figure'),
-     Output('ltv-by-internet-chart', 'figure'),
-     Output('ltv-by-contract-chart', 'figure')],
+     Output('tenure-distribution-chart', 'figure'),
+     Output('ltv-customer-count-chart', 'figure'),
+     Output('ltv-by-bundle-chart', 'figure')],
     [Input('gender-filter', 'value'),
      Input('paperless-filter', 'value'),
      Input('phone-filter', 'value'),
-     Input('dependents-filter', 'value'),
-     Input('tenure-min', 'value'),
-     Input('tenure-max', 'value')]
+     Input('dependents-filter', 'value')]
 )
-def update_dashboard(gender_filter, paperless_filter, phone_filter, dependents_filter, tenure_min, tenure_max):
+def update_dashboard(gender_filter, paperless_filter, phone_filter, dependents_filter):
     """Update all dashboard components based on filter selections."""
-    filtered_df = filter_data(gender_filter, paperless_filter, phone_filter, dependents_filter, tenure_min, tenure_max)
+    filtered_df = filter_data(gender_filter, paperless_filter, phone_filter, dependents_filter)
     
     # Calculate KPIs
     total_customers = f"{len(filtered_df):,}"
@@ -978,28 +852,25 @@ def update_dashboard(gender_filter, paperless_filter, phone_filter, dependents_f
     # Generate charts with filtered data
     internet_chart = create_churn_by_internet_chart(filtered_df) if len(filtered_df) > 0 else go.Figure()
     contract_chart = create_churn_by_contract_chart(filtered_df) if len(filtered_df) > 0 else go.Figure()
-    payment_chart = create_churn_by_payment_method_chart(filtered_df) if len(filtered_df) > 0 else go.Figure()
-    tenure_chart = create_tenure_histogram(filtered_df) if len(filtered_df) > 0 else go.Figure()
-    ltv_internet_chart = create_ltv_by_internet_service_chart(filtered_df) if len(filtered_df) > 0 else go.Figure()
-    ltv_contract_chart = create_ltv_by_contract_chart(filtered_df) if len(filtered_df) > 0 else go.Figure()
+    tenure_chart = create_tenure_distribution_chart(filtered_df) if len(filtered_df) > 0 else go.Figure()
+    ltv_comparison_chart = create_ltv_comparison_chart(filtered_df) if len(filtered_df) > 0 else go.Figure()
+    ltv_bundle_chart = create_ltv_by_service_bundle_chart(filtered_df) if len(filtered_df) > 0 else go.Figure()
     
     return (total_customers, churn_rate, monthly_revenue, avg_tenure,
-            internet_chart, contract_chart, payment_chart, tenure_chart,
-            ltv_internet_chart, ltv_contract_chart)
+            internet_chart, contract_chart, tenure_chart, ltv_comparison_chart,
+            ltv_bundle_chart)
 
 @app.callback(
     [Output('gender-filter', 'value'),
      Output('paperless-filter', 'value'),
      Output('phone-filter', 'value'),
-     Output('dependents-filter', 'value'),
-     Output('tenure-min', 'value'),
-     Output('tenure-max', 'value')],
+     Output('dependents-filter', 'value')],
     [Input('reset-filters', 'n_clicks')],
     prevent_initial_call=True
 )
 def reset_filters(n_clicks):
     """Reset all filters to default values."""
-    return 'All', 'All', 'All', 'All', 0, 72
+    return 'All', 'All', 'All', 'All'
 
 # ============================================================================
 # RUN SERVER

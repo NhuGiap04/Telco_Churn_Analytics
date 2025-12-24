@@ -6,3 +6,9 @@ Customer_Risk_Analysis.png
 
 # PowerBI
 *.pbix
+
+# PDF
+*.pdf
+
+# Python
+__pycache__
