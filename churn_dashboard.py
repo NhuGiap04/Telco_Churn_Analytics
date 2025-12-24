@@ -353,7 +353,7 @@ def create_ltv_by_service_bundle_chart(df):
 external_stylesheets = [dbc.themes.BOOTSTRAP]
 
 app = Dash(__name__, external_stylesheets=external_stylesheets)
-app.title = "Telco Churn Analysis"
+app.title = "Telecommunication Churn Analysis"
 
 # ============================================================================
 # LAYOUT
@@ -460,7 +460,7 @@ app.layout = dbc.Container([
             ], className='mb-2'),
             
             dbc.Row([
-                # KPI Card 3: Monthly Revenue
+                # KPI Card 3: Revenue
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
@@ -475,7 +475,7 @@ app.layout = dbc.Container([
                                 }
                             ),
                             html.P(
-                                "Monthly Revenue",
+                                "Revenue",
                                 style={
                                     'color': '#6c757d',
                                     'fontSize': '0.85rem',
@@ -553,9 +553,9 @@ app.layout = dbc.Container([
                             )
                         ], md=3),
                         
-                        # Paperless Billing Filter
+                        # Payment Method Filter
                         dbc.Col([
-                            html.Label("Paperless Billing", style={
+                            html.Label("Payment Method", style={
                                 'color': '#2c3e50',
                                 'fontWeight': '600',
                                 'fontSize': '0.7rem',
@@ -563,11 +563,13 @@ app.layout = dbc.Container([
                                 'fontFamily': '"Segoe UI", sans-serif'
                             }),
                             dcc.Dropdown(
-                                id='paperless-filter',
+                                id='payment-filter',
                                 options=[
                                     {'label': 'All', 'value': 'All'},
-                                    {'label': 'Yes', 'value': 'Yes'},
-                                    {'label': 'No', 'value': 'No'}
+                                    {'label': 'Electronic check', 'value': 'Electronic check'},
+                                    {'label': 'Mailed check', 'value': 'Mailed check'},
+                                    {'label': 'Bank transfer', 'value': 'Bank transfer (automatic)'},
+                                    {'label': 'Credit card', 'value': 'Credit card (automatic)'}
                                 ],
                                 value='All',
                                 clearable=False,
@@ -800,15 +802,15 @@ app.layout = dbc.Container([
 # CALLBACKS
 # ============================================================================
 
-def filter_data(gender_filter, paperless_filter, phone_filter, dependents_filter):
+def filter_data(gender_filter, payment_filter, phone_filter, dependents_filter):
     """Filter dataframe based on sidebar selections."""
     filtered_df = df.copy()
     
     if gender_filter != 'All':
         filtered_df = filtered_df[filtered_df['gender'] == gender_filter]
     
-    if paperless_filter != 'All':
-        filtered_df = filtered_df[filtered_df['PaperlessBilling'] == paperless_filter]
+    if payment_filter != 'All':
+        filtered_df = filtered_df[filtered_df['PaymentMethod'] == payment_filter]
     
     if phone_filter != 'All':
         filtered_df = filtered_df[filtered_df['PhoneService'] == phone_filter]
@@ -829,13 +831,13 @@ def filter_data(gender_filter, paperless_filter, phone_filter, dependents_filter
      Output('ltv-customer-count-chart', 'figure'),
      Output('ltv-by-bundle-chart', 'figure')],
     [Input('gender-filter', 'value'),
-     Input('paperless-filter', 'value'),
+     Input('payment-filter', 'value'),
      Input('phone-filter', 'value'),
      Input('dependents-filter', 'value')]
 )
-def update_dashboard(gender_filter, paperless_filter, phone_filter, dependents_filter):
+def update_dashboard(gender_filter, payment_filter, phone_filter, dependents_filter):
     """Update all dashboard components based on filter selections."""
-    filtered_df = filter_data(gender_filter, paperless_filter, phone_filter, dependents_filter)
+    filtered_df = filter_data(gender_filter, payment_filter, phone_filter, dependents_filter)
     
     # Calculate KPIs
     total_customers = f"{len(filtered_df):,}"
@@ -862,7 +864,7 @@ def update_dashboard(gender_filter, paperless_filter, phone_filter, dependents_f
 
 @app.callback(
     [Output('gender-filter', 'value'),
-     Output('paperless-filter', 'value'),
+     Output('payment-filter', 'value'),
      Output('phone-filter', 'value'),
      Output('dependents-filter', 'value')],
     [Input('reset-filters', 'n_clicks')],
